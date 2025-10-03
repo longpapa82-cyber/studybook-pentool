@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    font-family: 'Inter var', system-ui, -apple-system, sans-serif;
+    line-height: 1.5;
+    font-weight: 400;
+
+    color-scheme: light;
+    color: #1f2937;
+    background-color: #fafafa;
+
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    min-height: 100vh;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+}
+
+@layer components {
+  /* 버튼 스타일 */
+  .btn {
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200;
+    @apply hover:shadow-md active:scale-95;
+  }
+
+  .btn-primary {
+    @apply bg-gradient-to-r from-primary-500 to-secondary-500;
+    @apply text-white hover:from-primary-600 hover:to-secondary-600;
+  }
+
+  .btn-secondary {
+    @apply bg-white border border-gray-200;
+    @apply text-gray-700 hover:bg-gray-50;
+  }
+
+  /* 아이콘 버튼 */
+  .icon-btn {
+    @apply p-2 rounded-lg transition-all duration-200;
+    @apply hover:bg-gray-100 active:scale-95;
+  }
+
+  /* 툴바 스타일 */
+  .toolbar {
+    @apply flex items-center gap-2 p-3;
+    @apply bg-white border-b border-gray-200;
+    @apply shadow-soft;
+  }
+
+  /* 카드 스타일 */
+  .card {
+    @apply bg-white rounded-2xl shadow-soft;
+    @apply border border-gray-100;
+  }
+}
+
+@layer utilities {
+  /* 애니메이션 유틸리티 */
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
