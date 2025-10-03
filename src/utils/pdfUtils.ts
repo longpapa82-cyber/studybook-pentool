@@ -2,11 +2,19 @@
 
 import * as pdfjsLib from 'pdfjs-dist';
 
-// PDF.js Worker 설정
-const WORKER_SRC = `https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.worker.min.mjs`;
+// PDF.js Worker 설정 - Vercel 배포 환경에서도 작동하도록 CDN 사용
+const WORKER_SRC = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.mjs`;
 
 // Worker 초기화
-pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_SRC;
+if (typeof window !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_SRC;
+}
+
+// CORS 설정을 위한 기본 옵션
+const DEFAULT_PDF_OPTIONS = {
+  isEvalSupported: false,
+  useSystemFonts: true,
+};
 
 /**
  * ArrayBuffer에서 PDF 문서 로드
@@ -17,13 +25,15 @@ export async function loadPdfFromArrayBuffer(
   try {
     const loadingTask = pdfjsLib.getDocument({
       data: arrayBuffer,
+      ...DEFAULT_PDF_OPTIONS,
     });
 
     const pdf = await loadingTask.promise;
     return pdf;
   } catch (error) {
     console.error('PDF 로드 실패:', error);
-    throw new Error('PDF 파일을 불러올 수 없습니다.');
+    console.error('Error details:', error);
+    throw new Error(`PDF 파일을 불러올 수 없습니다: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
