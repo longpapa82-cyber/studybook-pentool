@@ -64,19 +64,39 @@ function App() {
     try {
       setLoading(true);
 
+      console.log('[PDF 로드 시작]', { id });
+
       const pdfDoc = await storageService.getPdfById(id);
       if (!pdfDoc) {
+        console.error('[PDF 없음]', { id });
         alert('PDF를 찾을 수 없습니다.');
         return;
       }
 
+      console.log('[PDF 문서 조회 성공]', {
+        id,
+        name: pdfDoc.name,
+        fileSize: pdfDoc.file.byteLength
+      });
+
+      console.log('[PDF.js 로드 시작]');
       const pdf = await loadPdfFromArrayBuffer(pdfDoc.file);
+      console.log('[PDF.js 로드 성공]', {
+        pages: pdf.numPages
+      });
+
       setPdfDocument(pdf, id, pdfDoc.name);
 
       setCurrentView('viewer');
+      console.log('[뷰어 전환 완료]');
     } catch (error) {
-      console.error('PDF 로드 실패:', error);
-      alert('PDF를 불러오는 중 오류가 발생했습니다.');
+      console.error('[PDF 로드 실패 - 전체]', error);
+
+      const errorMessage = error instanceof Error
+        ? error.message
+        : 'Unknown error';
+
+      alert(`PDF를 불러오는 중 오류가 발생했습니다.\n\n상세: ${errorMessage}\n\nF12를 눌러 Console 탭을 확인해주세요.`);
     } finally {
       setLoading(false);
     }
