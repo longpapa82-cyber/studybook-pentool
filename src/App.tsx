@@ -13,6 +13,11 @@ const EbookViewer = lazy(() => import('@/components/ebook/EbookViewer').then(m =
 const ThumbnailPanel = lazy(() => import('@/components/ebook/ThumbnailPanel').then(m => ({ default: m.ThumbnailPanel })));
 const BottomTabBar = lazy(() => import('@/components/ebook/BottomTabBar').then(m => ({ default: m.BottomTabBar })));
 
+// Phase 1 components
+const KeyboardShortcutsGuide = lazy(() => import('@/components/common/KeyboardShortcutsGuide').then(m => ({ default: m.KeyboardShortcutsGuide })));
+const FirstTimeTutorial = lazy(() => import('@/components/tutorial/FirstTimeTutorial').then(m => ({ default: m.FirstTimeTutorial })));
+const QuickTips = lazy(() => import('@/components/tutorial/QuickTips').then(m => ({ default: m.QuickTips })));
+
 // Loading fallback component
 const LoadingSpinner = () => (
   <div className="flex items-center justify-center p-4">
@@ -290,6 +295,11 @@ function App() {
             <EbookViewer />
             <ThumbnailPanel />
             <BottomTabBar onClose={handleCloseViewer} />
+
+            {/* Phase 1: UX Improvement Components */}
+            <KeyboardShortcutsGuide />
+            <FirstTimeTutorial />
+            <QuickTips />
           </Suspense>
         </div>
       )}
