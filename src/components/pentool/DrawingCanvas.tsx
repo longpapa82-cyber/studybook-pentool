@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { Stage, Layer, Line, Text as KonvaText } from 'react-konva';
+import { Stage, Layer, Line, Text as KonvaText, Rect, Ellipse } from 'react-konva';
 import { usePentoolStore } from '@/stores/pentoolStore';
 import { useEbookStore } from '@/stores/ebookStore';
 import { requestAnimationFrameThrottle } from '@/utils/performanceUtils';
@@ -8,7 +8,8 @@ import { TextEditor } from './TextEditor';
 import { calculateViewport, expandViewport, getVisibleAnnotations } from '@/utils/viewportUtils';
 import { getPerformanceMonitor } from '@/utils/performanceMonitor';
 import { flatPointsToPointArray, getAnnotationsInLasso, simplifyLassoPath } from '@/utils/lassoUtils';
-import type { TextData, Point } from '@/types/pentool.types';
+import { shapeToKonvaProps } from '@/utils/shapeUtils';
+import type { TextData, Point, ShapeData } from '@/types/pentool.types';
 
 interface DrawingCanvasProps {
   pdfCanvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -35,12 +36,17 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
     strokeWidth,
     isDrawing,
     currentLine,
+    isDrawingShape,
+    currentShape,
     annotations,
     selectedAnnotationId,
     selectedAnnotations,
     startDrawing,
     continueDrawing,
     finishDrawing,
+    startShape,
+    updateShape,
+    finishShape,
     selectAnnotation,
     moveAnnotation,
     clearSelection,
@@ -129,6 +135,13 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
       return;
     }
 
+    // Phase 3-3: Shape tool handling
+    if (['line', 'arrow', 'rectangle', 'circle'].includes(activeTool)) {
+      const pos = e.target.getStage().getPointerPosition();
+      startShape({ x: pos.x, y: pos.y });
+      return;
+    }
+
     // 선택 모드가 아닐 때는 드로잉
     if (activeTool !== 'none') {
       const pos = e.target.getStage().getPointerPosition();
@@ -146,12 +159,20 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
         return;
       }
 
+      // Phase 3-3: Shape drawing
+      if (isDrawingShape) {
+        const pos = e.target.getStage().getPointerPosition();
+        const shiftKey = e.evt?.shiftKey || false;
+        updateShape({ x: pos.x, y: pos.y }, shiftKey);
+        return;
+      }
+
       if (!isDrawing) return;
 
       const pos = e.target.getStage().getPointerPosition();
       continueDrawing({ x: pos.x, y: pos.y });
     }),
-    [isDrawing, isLassoDrawing, continueDrawing]
+    [isDrawing, isLassoDrawing, isDrawingShape, continueDrawing, updateShape]
   );
 
   const handleMouseUp = () => {
@@ -170,6 +191,12 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
       // Reset lasso
       setIsLassoDrawing(false);
       setLassoPath([]);
+      return;
+    }
+
+    // Phase 3-3: Shape drawing completion
+    if (isDrawingShape) {
+      finishShape(currentPage);
       return;
     }
 
@@ -388,6 +415,70 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
                   listening={activeTool === 'none'}
                 />
               );
+            } else if (annotation.type === 'shape') {
+              // Phase 3-3: Shape annotation rendering
+              const shapeData = annotation.data as ShapeData;
+              const isSelected =
+                selectedAnnotationId === annotation.id || selectedAnnotations.has(annotation.id);
+              const konvaProps = shapeToKonvaProps(shapeData);
+
+              const commonProps = {
+                key: annotation.id,
+                stroke: isSelected ? '#3B82F6' : shapeData.color,
+                strokeWidth: isSelected ? shapeData.strokeWidth + 2 : shapeData.strokeWidth,
+                draggable: activeTool === 'none',
+                onClick: () => handleAnnotationClick(annotation.id),
+                onTap: () => handleAnnotationClick(annotation.id),
+                onContextMenu: (e: any) => handleAnnotationContextMenu(annotation.id, e),
+                onDragStart: (e: any) => handleAnnotationDragStart(annotation.id, e),
+                onDragEnd: (e: any) => handleAnnotationDragEnd(annotation.id, e),
+                listening: activeTool === 'none',
+              };
+
+              if (shapeData.tool === 'line') {
+                return <Line {...commonProps} points={konvaProps.points} />;
+              } else if (shapeData.tool === 'arrow') {
+                return (
+                  <>
+                    <Line
+                      key={`${annotation.id}-line`}
+                      {...commonProps}
+                      points={konvaProps.line.points}
+                    />
+                    <Line
+                      key={`${annotation.id}-head`}
+                      points={konvaProps.arrowHead.points}
+                      fill={isSelected ? '#3B82F6' : shapeData.color}
+                      stroke={isSelected ? '#3B82F6' : shapeData.color}
+                      strokeWidth={isSelected ? shapeData.strokeWidth + 2 : shapeData.strokeWidth}
+                      closed={true}
+                      listening={false}
+                    />
+                  </>
+                );
+              } else if (shapeData.tool === 'rectangle') {
+                return (
+                  <Rect
+                    {...commonProps}
+                    x={konvaProps.x}
+                    y={konvaProps.y}
+                    width={konvaProps.width}
+                    height={konvaProps.height}
+                    fill="transparent"
+                  />
+                );
+              } else if (shapeData.tool === 'circle') {
+                return (
+                  <Ellipse
+                    {...commonProps}
+                    x={konvaProps.x}
+                    y={konvaProps.y}
+                    radiusX={konvaProps.radiusX}
+                    radiusY={konvaProps.radiusY}
+                    fill="transparent"
+                  />
+                );
+              }
             }
             return null;
           })}
@@ -416,6 +507,59 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
               listening={false}
             />
           )}
+
+          {/* Phase 3-3: Current shape preview */}
+          {currentShape && (() => {
+            const konvaProps = shapeToKonvaProps(currentShape);
+            const previewProps = {
+              stroke: currentShape.color,
+              strokeWidth: currentShape.strokeWidth,
+              dash: [5, 5],
+              listening: false,
+            };
+
+            if (currentShape.tool === 'line') {
+              return <Line {...previewProps} points={konvaProps.points} />;
+            } else if (currentShape.tool === 'arrow') {
+              return (
+                <>
+                  <Line {...previewProps} points={konvaProps.line.points} />
+                  <Line
+                    points={konvaProps.arrowHead.points}
+                    fill={currentShape.color}
+                    stroke={currentShape.color}
+                    strokeWidth={currentShape.strokeWidth}
+                    closed={true}
+                    listening={false}
+                    opacity={0.7}
+                  />
+                </>
+              );
+            } else if (currentShape.tool === 'rectangle') {
+              return (
+                <Rect
+                  {...previewProps}
+                  x={konvaProps.x}
+                  y={konvaProps.y}
+                  width={konvaProps.width}
+                  height={konvaProps.height}
+                  fill="transparent"
+                />
+              );
+            } else if (currentShape.tool === 'circle') {
+              return (
+                <Ellipse
+                  {...previewProps}
+                  x={konvaProps.x}
+                  y={konvaProps.y}
+                  radiusX={konvaProps.radiusX}
+                  radiusY={konvaProps.radiusY}
+                  fill="transparent"
+                />
+              );
+            }
+            return null;
+          })()}
         </Layer>
       </Stage>
 

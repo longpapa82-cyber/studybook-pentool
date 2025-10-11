@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { PenTool, DrawingLine, Annotation, TextData } from '@/types/pentool.types';
+import type { PenTool, DrawingLine, Annotation, TextData, ShapeData, Point } from '@/types/pentool.types';
 import { simplifyPoints } from '@/utils/geometryUtils';
 import { saveToLocalStorage, loadFromLocalStorage } from '@/utils/storageUtils';
 
@@ -14,6 +14,10 @@ interface PentoolState {
   // 그리기 상태
   isDrawing: boolean;
   currentLine: DrawingLine | null;
+
+  // Phase 3-3: Shape drawing state
+  isDrawingShape: boolean;
+  currentShape: ShapeData | null;
 
   // 주석 데이터
   annotations: Map<number, Annotation[]>; // pageNumber -> annotations
@@ -35,6 +39,12 @@ interface PentoolState {
   startDrawing: (point: { x: number; y: number }) => void;
   continueDrawing: (point: { x: number; y: number }) => void;
   finishDrawing: (pageNumber: number) => void;
+
+  // Phase 3-3: Shape drawing
+  startShape: (point: Point) => void;
+  updateShape: (point: Point, shiftKey?: boolean) => void;
+  finishShape: (pageNumber: number) => void;
+  cancelShape: () => void;
 
   // Text annotation
   addTextAnnotation: (pageNumber: number, textData: TextData) => void;
@@ -82,6 +92,8 @@ export const usePentoolStore = create<PentoolState>((set, get) => ({
   strokeWidth: 2,
   isDrawing: false,
   currentLine: null,
+  isDrawingShape: false,
+  currentShape: null,
   annotations: new Map(),
   selectedAnnotationId: null,
   selectedAnnotations: new Set(),
@@ -212,6 +224,95 @@ export const usePentoolStore = create<PentoolState>((set, get) => ({
     newAnnotations.set(pageNumber, updatedAnnotations);
 
     set({ annotations: newAnnotations });
+  },
+
+  // Phase 3-3: Shape drawing methods
+  startShape: (point) => {
+    const { activeTool, penColor, strokeWidth } = get();
+
+    if (!['line', 'arrow', 'rectangle', 'circle'].includes(activeTool)) {
+      return;
+    }
+
+    set({
+      isDrawingShape: true,
+      currentShape: {
+        tool: activeTool,
+        startPoint: point,
+        endPoint: point,
+        color: penColor,
+        strokeWidth,
+      },
+    });
+  },
+
+  updateShape: (point, shiftKey = false) => {
+    const { currentShape } = get();
+    if (!currentShape) return;
+
+    let endPoint = point;
+
+    // Apply constraints with Shift key
+    if (shiftKey) {
+      const { constrainShapePoint } = require('@/utils/shapeUtils');
+      endPoint = constrainShapePoint(currentShape.startPoint, point, currentShape.tool);
+    }
+
+    set({
+      currentShape: {
+        ...currentShape,
+        endPoint,
+      },
+    });
+  },
+
+  finishShape: (pageNumber) => {
+    const { currentShape, annotations } = get();
+
+    if (!currentShape) {
+      set({ isDrawingShape: false, currentShape: null });
+      return;
+    }
+
+    // Validate shape has minimum size
+    const dx = Math.abs(currentShape.endPoint.x - currentShape.startPoint.x);
+    const dy = Math.abs(currentShape.endPoint.y - currentShape.startPoint.y);
+    if (dx < 5 && dy < 5) {
+      set({ isDrawingShape: false, currentShape: null });
+      return;
+    }
+
+    const newAnnotation: Annotation = {
+      id: `shape_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      type: 'shape',
+      data: currentShape,
+      pageNumber,
+      createdAt: new Date().toISOString(),
+    };
+
+    const pageAnnotations = annotations.get(pageNumber) || [];
+    const newAnnotations = new Map(annotations);
+    newAnnotations.set(pageNumber, [...pageAnnotations, newAnnotation]);
+
+    // History 업데이트
+    const { history, historyIndex } = get();
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(Array.from(newAnnotations.values()).flat());
+
+    set({
+      isDrawingShape: false,
+      currentShape: null,
+      annotations: newAnnotations,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+    });
+  },
+
+  cancelShape: () => {
+    set({
+      isDrawingShape: false,
+      currentShape: null,
+    });
   },
 
   addAnnotation: (pageNumber, annotation) => {
