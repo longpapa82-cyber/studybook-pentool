@@ -7,7 +7,8 @@ import { ContextMenu } from './ContextMenu';
 import { TextEditor } from './TextEditor';
 import { calculateViewport, expandViewport, getVisibleAnnotations } from '@/utils/viewportUtils';
 import { getPerformanceMonitor } from '@/utils/performanceMonitor';
-import type { TextData } from '@/types/pentool.types';
+import { flatPointsToPointArray, getAnnotationsInLasso, simplifyLassoPath } from '@/utils/lassoUtils';
+import type { TextData, Point } from '@/types/pentool.types';
 
 interface DrawingCanvasProps {
   pdfCanvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -25,6 +26,8 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
   } | null>(null);
   const [textEditorPosition, setTextEditorPosition] = useState<{ x: number; y: number } | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [lassoPath, setLassoPath] = useState<Point[]>([]);  // Phase 3-2: Lasso selection
+  const [isLassoDrawing, setIsLassoDrawing] = useState(false);
 
   const {
     activeTool,
@@ -34,6 +37,7 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
     currentLine,
     annotations,
     selectedAnnotationId,
+    selectedAnnotations,
     startDrawing,
     continueDrawing,
     finishDrawing,
@@ -42,6 +46,8 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
     clearSelection,
     addTextAnnotation,
     updateTextAnnotation,
+    selectMultipleAnnotations,
+    moveMultipleAnnotations,
   } = usePentoolStore();
 
   const { currentPage, zoom } = useEbookStore();
@@ -115,6 +121,14 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
       return;
     }
 
+    // Phase 3-2: Lasso tool handling
+    if (activeTool === 'lasso') {
+      const pos = e.target.getStage().getPointerPosition();
+      setIsLassoDrawing(true);
+      setLassoPath([{ x: pos.x, y: pos.y }]);
+      return;
+    }
+
     // 선택 모드가 아닐 때는 드로잉
     if (activeTool !== 'none') {
       const pos = e.target.getStage().getPointerPosition();
@@ -125,15 +139,40 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
   // Throttle drawing events for 60fps performance
   const handleMouseMove = useCallback(
     requestAnimationFrameThrottle((e: any) => {
+      // Phase 3-2: Lasso drawing
+      if (isLassoDrawing) {
+        const pos = e.target.getStage().getPointerPosition();
+        setLassoPath((prev) => [...prev, { x: pos.x, y: pos.y }]);
+        return;
+      }
+
       if (!isDrawing) return;
 
       const pos = e.target.getStage().getPointerPosition();
       continueDrawing({ x: pos.x, y: pos.y });
     }),
-    [isDrawing, continueDrawing]
+    [isDrawing, isLassoDrawing, continueDrawing]
   );
 
   const handleMouseUp = () => {
+    // Phase 3-2: Lasso selection completion
+    if (isLassoDrawing) {
+      // Simplify and close the lasso path
+      const simplifiedPath = simplifyLassoPath(lassoPath, 5);
+      const closedPath = [...simplifiedPath, simplifiedPath[0]];
+
+      // Get annotations in lasso
+      const selectedIds = getAnnotationsInLasso(pageAnnotations, closedPath).map((a) => a.id);
+
+      // Select them
+      selectMultipleAnnotations(selectedIds);
+
+      // Reset lasso
+      setIsLassoDrawing(false);
+      setLassoPath([]);
+      return;
+    }
+
     if (!isDrawing) return;
     finishDrawing(currentPage);
   };
@@ -294,7 +333,8 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
           {visibleAnnotations.map((annotation) => {
             if (annotation.type === 'drawing') {
               const line = annotation.data;
-              const isSelected = selectedAnnotationId === annotation.id;
+              const isSelected =
+                selectedAnnotationId === annotation.id || selectedAnnotations.has(annotation.id);
 
               return (
                 <Line
@@ -323,7 +363,8 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
             } else if (annotation.type === 'text') {
               // Phase 3-1: Text annotation rendering
               const textData = annotation.data as TextData;
-              const isSelected = selectedAnnotationId === annotation.id;
+              const isSelected =
+                selectedAnnotationId === annotation.id || selectedAnnotations.has(annotation.id);
 
               return (
                 <KonvaText
@@ -358,6 +399,20 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
               {...getLineStyle(currentLine.tool)}
               stroke={currentLine.color}
               strokeWidth={currentLine.strokeWidth}
+              listening={false}
+            />
+          )}
+
+          {/* Phase 3-2: Lasso path visualization */}
+          {isLassoDrawing && lassoPath.length > 1 && (
+            <Line
+              points={lassoPath.flatMap((p) => [p.x, p.y])}
+              stroke="#3B82F6"
+              strokeWidth={2}
+              dash={[5, 5]}
+              lineCap="round"
+              lineJoin="round"
+              closed={false}
               listening={false}
             />
           )}

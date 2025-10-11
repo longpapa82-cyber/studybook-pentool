@@ -47,10 +47,14 @@ interface PentoolState {
   selectAnnotation: (annotationId: string | null) => void;
   toggleAnnotationSelection: (annotationId: string) => void;
   clearSelection: () => void;
+  selectMultipleAnnotations: (annotationIds: string[]) => void;  // Phase 3-2
+  addToSelection: (annotationIds: string[]) => void;  // Phase 3-2
 
   // 편집 관련
   updateAnnotation: (pageNumber: number, annotationId: string, updates: Partial<Annotation>) => void;
   moveAnnotation: (pageNumber: number, annotationId: string, deltaX: number, deltaY: number) => void;
+  moveMultipleAnnotations: (pageNumber: number, annotationIds: string[], deltaX: number, deltaY: number) => void;  // Phase 3-2
+  deleteMultipleAnnotations: (pageNumber: number, annotationIds: string[]) => void;  // Phase 3-2
 
   // 복사/붙여넣기
   copyAnnotation: (annotationId: string, pageNumber: number) => void;
@@ -269,6 +273,24 @@ export const usePentoolStore = create<PentoolState>((set, get) => ({
     });
   },
 
+  // Phase 3-2: Multi-selection methods
+  selectMultipleAnnotations: (annotationIds) => {
+    const newSelection = new Set(annotationIds);
+    set({
+      selectedAnnotations: newSelection,
+      selectedAnnotationId: newSelection.size === 1 ? annotationIds[0] : null
+    });
+  },
+
+  addToSelection: (annotationIds) => {
+    const { selectedAnnotations } = get();
+    const newSelection = new Set([...selectedAnnotations, ...annotationIds]);
+    set({
+      selectedAnnotations: newSelection,
+      selectedAnnotationId: newSelection.size === 1 ? Array.from(newSelection)[0] : null
+    });
+  },
+
   // 편집 관련
   updateAnnotation: (pageNumber, annotationId, updates) => {
     const { annotations } = get();
@@ -300,16 +322,46 @@ export const usePentoolStore = create<PentoolState>((set, get) => ({
     const pageAnnotations = annotations.get(pageNumber) || [];
     const annotation = pageAnnotations.find((a) => a.id === annotationId);
 
-    if (!annotation || annotation.type !== 'drawing') return;
+    if (!annotation) return;
 
-    const movedPoints = annotation.data.points.map((point, index) =>
-      index % 2 === 0 ? point + deltaX : point + deltaY
-    );
+    if (annotation.type === 'drawing') {
+      const movedPoints = annotation.data.points.map((point, index) =>
+        index % 2 === 0 ? point + deltaX : point + deltaY
+      );
 
-    const { updateAnnotation } = get();
-    updateAnnotation(pageNumber, annotationId, {
-      data: { ...annotation.data, points: movedPoints },
+      const { updateAnnotation } = get();
+      updateAnnotation(pageNumber, annotationId, {
+        data: { ...annotation.data, points: movedPoints },
+      });
+    } else if (annotation.type === 'text') {
+      const textData = annotation.data;
+      const { updateAnnotation } = get();
+      updateAnnotation(pageNumber, annotationId, {
+        data: {
+          ...textData,
+          position: {
+            x: textData.position.x + deltaX,
+            y: textData.position.y + deltaY,
+          },
+        },
+      });
+    }
+  },
+
+  // Phase 3-2: Batch operations
+  moveMultipleAnnotations: (pageNumber, annotationIds, deltaX, deltaY) => {
+    const { moveAnnotation } = get();
+    annotationIds.forEach((id) => {
+      moveAnnotation(pageNumber, id, deltaX, deltaY);
     });
+  },
+
+  deleteMultipleAnnotations: (pageNumber, annotationIds) => {
+    const { removeAnnotation, clearSelection } = get();
+    annotationIds.forEach((id) => {
+      removeAnnotation(pageNumber, id);
+    });
+    clearSelection();
   },
 
   // 복사/붙여넣기

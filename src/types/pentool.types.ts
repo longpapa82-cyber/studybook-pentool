@@ -1,6 +1,6 @@
 // 펜툴 관련 타입 정의
 
-export type PenTool = 'pen' | 'highlighter' | 'eraser' | 'line' | 'arrow' | 'rectangle' | 'circle' | 'text' | 'none';
+export type PenTool = 'pen' | 'highlighter' | 'eraser' | 'line' | 'arrow' | 'rectangle' | 'circle' | 'text' | 'lasso' | 'none';
 export type InputMode = 'touch' | 'pen';
 
 export interface PenConfig {
