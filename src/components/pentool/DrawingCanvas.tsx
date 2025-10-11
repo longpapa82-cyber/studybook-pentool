@@ -3,9 +3,10 @@ import { Stage, Layer, Line } from 'react-konva';
 import { usePentoolStore } from '@/stores/pentoolStore';
 import { useEbookStore } from '@/stores/ebookStore';
 import { requestAnimationFrameThrottle } from '@/utils/performanceUtils';
+import { ContextMenu } from './ContextMenu';
 
 interface DrawingCanvasProps {
-  pdfCanvasRef: React.RefObject<HTMLCanvasElement>;
+  pdfCanvasRef: React.RefObject<HTMLCanvasElement | null>;
 }
 
 export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
@@ -13,6 +14,11 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
   const lineRefs = useRef<Map<string, any>>(new Map());
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    annotationId: string;
+  } | null>(null);
 
   const {
     activeTool,
@@ -30,7 +36,7 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
     clearSelection,
   } = usePentoolStore();
 
-  const { currentPage } = useEbookStore();
+  const { currentPage, zoom } = useEbookStore();
 
   const pageAnnotations = annotations.get(currentPage) || [];
 
@@ -38,9 +44,10 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
   useEffect(() => {
     const updateSize = () => {
       if (pdfCanvasRef.current) {
+        const rect = pdfCanvasRef.current.getBoundingClientRect();
         setCanvasSize({
-          width: pdfCanvasRef.current.width,
-          height: pdfCanvasRef.current.height,
+          width: rect.width,
+          height: rect.height,
         });
       }
     };
@@ -53,7 +60,7 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
     }
 
     return () => observer.disconnect();
-  }, [pdfCanvasRef]);
+  }, [pdfCanvasRef, zoom]);
 
   const handleMouseDown = (e: any) => {
     const clickedOnEmpty = e.target === e.target.getStage();
@@ -92,6 +99,20 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
     if (activeTool === 'none') {
       selectAnnotation(annotationId);
     }
+  };
+
+  // 주석 우클릭 처리 (컨텍스트 메뉴)
+  const handleAnnotationContextMenu = (annotationId: string, e: any) => {
+    e.evt.preventDefault();
+    const stage = e.target.getStage();
+    const pointerPosition = stage.getPointerPosition();
+
+    setContextMenu({
+      x: pointerPosition.x,
+      y: pointerPosition.y,
+      annotationId,
+    });
+    selectAnnotation(annotationId);
   };
 
   // 주석 드래그 시작
@@ -203,6 +224,7 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
                   draggable={activeTool === 'none'}
                   onClick={() => handleAnnotationClick(annotation.id)}
                   onTap={() => handleAnnotationClick(annotation.id)}
+                  onContextMenu={(e) => handleAnnotationContextMenu(annotation.id, e)}
                   onDragStart={(e) => handleAnnotationDragStart(annotation.id, e)}
                   onDragEnd={(e) => handleAnnotationDragEnd(annotation.id, e)}
                   hitStrokeWidth={Math.max(line.strokeWidth, 10)}
@@ -225,6 +247,16 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
           )}
         </Layer>
       </Stage>
+
+      {/* 컨텍스트 메뉴 */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          annotationId={contextMenu.annotationId}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

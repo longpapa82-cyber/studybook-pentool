@@ -24,7 +24,7 @@ export function ThumbnailPanel() {
       const newThumbnails = new Map<number, string>();
 
       try {
-        // 현재 페이지 우선 생성
+        // 현재 페이지 우선 생성 (작은 크기로 조정)
         const currentPageObj = await pdfDocument.getPage(currentPage);
         const currentThumb = await generateThumbnail(currentPageObj, 150);
         newThumbnails.set(currentPage, currentThumb);
@@ -47,10 +47,9 @@ export function ThumbnailPanel() {
       }
     };
 
-    if (thumbnails.size === 0) {
-      generateThumbnails();
-    }
-  }, [pdfDocument, isThumbnailPanelOpen, currentPage, totalPages, thumbnails.size]);
+    // 항상 새로 생성하도록 변경
+    generateThumbnails();
+  }, [pdfDocument, isThumbnailPanelOpen, currentPage, totalPages]);
 
   if (!isThumbnailPanelOpen) {
     return (
@@ -72,27 +71,27 @@ export function ThumbnailPanel() {
   }
 
   return (
-    <div className="fixed left-0 top-16 bottom-0 w-64 bg-white border-r border-gray-200 shadow-lg z-20 overflow-y-auto">
+    <div className="fixed left-0 top-0 w-24 bg-white border-r border-gray-200 shadow-lg z-20 overflow-y-auto" style={{ height: 'calc(100vh - 70px)' }}>
       {/* 헤더 */}
-      <div className="sticky top-0 bg-white border-b border-gray-200 p-3 flex items-center justify-between">
-        <h3 className="font-semibold text-gray-800">페이지 목록</h3>
+      <div className="sticky top-0 bg-white border-b border-gray-200 p-1.5 flex items-center justify-between">
+        <h3 className="font-semibold text-gray-800 text-xs">목록</h3>
         <button
           onClick={toggleThumbnailPanel}
-          className="icon-btn"
+          className="icon-btn p-1"
           title="썸네일 패널 닫기"
         >
-          <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
 
       {/* 썸네일 리스트 */}
-      <div className="p-3 space-y-3">
+      <div className="p-1.5 space-y-1.5">
         {isGenerating && thumbnails.size === 0 ? (
-          <div className="text-center py-8">
-            <div className="inline-block animate-spin h-6 w-6 border-3 border-primary-500 border-t-transparent rounded-full"></div>
-            <p className="mt-2 text-sm text-gray-500">썸네일 생성 중...</p>
+          <div className="text-center py-4">
+            <div className="inline-block animate-spin h-4 w-4 border-2 border-primary-500 border-t-transparent rounded-full"></div>
+            <p className="mt-1 text-xs text-gray-500">생성중</p>
           </div>
         ) : (
           Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
@@ -104,38 +103,42 @@ export function ThumbnailPanel() {
                 key={pageNum}
                 onClick={() => goToPage(pageNum)}
                 className={`
-                  w-full p-2 rounded-lg transition-all
+                  w-full p-1 rounded transition-all
                   ${isActive
-                    ? 'bg-primary-50 ring-2 ring-primary-500'
+                    ? 'bg-primary-50 ring-1 ring-primary-500'
                     : 'hover:bg-gray-100'
                   }
                 `}
               >
                 {/* 썸네일 이미지 */}
-                <div className="relative bg-gray-100 rounded overflow-hidden mb-2">
+                <div className="relative bg-gray-100 rounded overflow-hidden mb-1">
                   {thumbnail ? (
                     <img
                       src={thumbnail}
                       alt={`페이지 ${pageNum}`}
                       className="w-full h-auto"
+                      style={{
+                        imageRendering: 'crisp-edges',
+                        objectFit: 'contain',
+                      }}
                     />
                   ) : (
                     <div className="aspect-[3/4] flex items-center justify-center">
-                      <div className="animate-spin h-6 w-6 border-3 border-gray-300 border-t-primary-500 rounded-full"></div>
+                      <div className="animate-spin h-3 w-3 border-2 border-gray-300 border-t-primary-500 rounded-full"></div>
                     </div>
                   )}
 
                   {/* 현재 페이지 표시 */}
                   {isActive && (
-                    <div className="absolute top-1 right-1 px-2 py-0.5 bg-primary-500 text-white text-xs rounded-full">
+                    <div className="absolute top-0.5 right-0.5 px-1 py-0.5 bg-primary-500 text-white text-[9px] rounded">
                       현재
                     </div>
                   )}
                 </div>
 
                 {/* 페이지 번호 */}
-                <p className={`text-sm ${isActive ? 'text-primary-700 font-semibold' : 'text-gray-600'}`}>
-                  {pageNum} / {totalPages}
+                <p className={`text-[10px] ${isActive ? 'text-primary-700 font-semibold' : 'text-gray-600'}`}>
+                  {pageNum}
                 </p>
               </button>
             );
@@ -145,9 +148,9 @@ export function ThumbnailPanel() {
 
       {/* 많은 페이지 경고 */}
       {totalPages > 50 && (
-        <div className="sticky bottom-0 bg-yellow-50 border-t border-yellow-200 p-3">
-          <p className="text-xs text-yellow-800">
-            ⚠️ 50페이지 이상은 성능상 일부만 표시됩니다.
+        <div className="sticky bottom-0 bg-yellow-50 border-t border-yellow-200 p-1.5">
+          <p className="text-[9px] text-yellow-800">
+            ⚠️ 50p 이상 일부만 표시
           </p>
         </div>
       )}

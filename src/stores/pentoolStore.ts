@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { PenTool, DrawingLine, Annotation } from '@/types/pentool.types';
+import { simplifyPoints } from '@/utils/geometryUtils';
 
 interface PentoolState {
   // 현재 활성화된 도구
@@ -112,10 +113,16 @@ export const usePentoolStore = create<PentoolState>((set, get) => ({
       return;
     }
 
+    // 포인트 단순화 적용 (50% 이상 포인트 수 감소, 메모리 및 성능 향상)
+    const simplifiedPoints = simplifyPoints(currentLine.points, 1.0);
+
     const newAnnotation: Annotation = {
       id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       type: 'drawing',
-      data: currentLine,
+      data: {
+        ...currentLine,
+        points: simplifiedPoints,
+      },
       pageNumber,
       createdAt: new Date().toISOString(),
     };

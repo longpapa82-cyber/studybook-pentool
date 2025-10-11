@@ -7,8 +7,12 @@ import { storageService } from '@/services/storageService';
 import { DrawingCanvas } from '@/components/pentool/DrawingCanvas';
 
 export function EbookViewer() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [currentPageProxy, setCurrentPageProxy] = useState<PDFPageProxy | null>(null);
+  const leftCanvasRef = useRef<HTMLCanvasElement>(null);
+  const rightCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [leftPageProxy, setLeftPageProxy] = useState<PDFPageProxy | null>(null);
+  const [rightPageProxy, setRightPageProxy] = useState<PDFPageProxy | null>(null);
+  const [pageTransition, setPageTransition] = useState<'next' | 'prev' | null>(null);
+  const prevPageRef = useRef<number>(1);
 
   const {
     pdfDocument,
@@ -20,20 +24,56 @@ export function EbookViewer() {
     setLoading,
     setError,
     pdfId,
+    totalPages,
+    isThumbnailPanelOpen,
+    nextPage,
+    previousPage,
+    zoomIn,
+    resetZoom,
   } = useEbookStore();
 
   const { loadAnnotations, annotations } = usePentoolStore();
+
+  // 더블 클릭 핸들러 - 확대/축소 토글
+  const handleDoubleClick = () => {
+    if (zoom === 1.0) {
+      // 기본 줌이면 확대
+      zoomIn();
+    } else {
+      // 확대되어 있으면 원래대로
+      resetZoom();
+    }
+  };
 
   // PDF 페이지 로드
   useEffect(() => {
     if (!pdfDocument) return;
 
-    const loadPage = async () => {
+    const loadPages = async () => {
       try {
         setLoading(true);
-        const page = await pdfDocument.getPage(currentPage);
-        setCurrentPageProxy(page);
+
+        // 페이지 전환 방향 감지
+        const direction = currentPage > prevPageRef.current ? 'next' : 'prev';
+        setPageTransition(direction);
+        prevPageRef.current = currentPage;
+
+        // 왼쪽 페이지 (또는 단일 페이지)
+        const leftPage = await pdfDocument.getPage(currentPage);
+        setLeftPageProxy(leftPage);
+
+        // 양면 모드일 때만 오른쪽 페이지 로드
+        if (displayMode === 'double' && currentPage < totalPages) {
+          const rightPage = await pdfDocument.getPage(currentPage + 1);
+          setRightPageProxy(rightPage);
+        } else {
+          setRightPageProxy(null);
+        }
+
         setError(null);
+
+        // 애니메이션 종료 (0.6초로 증가)
+        setTimeout(() => setPageTransition(null), 600);
       } catch (error) {
         console.error('페이지 로드 실패:', error);
         setError('페이지를 불러올 수 없습니다.');
@@ -42,31 +82,42 @@ export function EbookViewer() {
       }
     };
 
-    loadPage();
-  }, [pdfDocument, currentPage, setLoading, setError]);
+    loadPages();
+  }, [pdfDocument, currentPage, displayMode, totalPages, setLoading, setError]);
 
   // Canvas 렌더링 (requestAnimationFrame for smooth rendering)
   useEffect(() => {
-    if (!currentPageProxy || !canvasRef.current) return;
+    if (!leftPageProxy || !leftCanvasRef.current) return;
 
-    let rafId: number;
-    const renderPage = async () => {
+    let leftRafId: number;
+    let rightRafId: number;
+
+    const renderPages = async () => {
       try {
-        rafId = requestAnimationFrame(async () => {
-          await renderPageToCanvas(currentPageProxy, canvasRef.current!, zoom);
+        // 왼쪽 페이지 렌더링
+        leftRafId = requestAnimationFrame(async () => {
+          await renderPageToCanvas(leftPageProxy, leftCanvasRef.current!, zoom);
         });
+
+        // 오른쪽 페이지 렌더링 (양면 모드)
+        if (rightPageProxy && rightCanvasRef.current) {
+          rightRafId = requestAnimationFrame(async () => {
+            await renderPageToCanvas(rightPageProxy, rightCanvasRef.current!, zoom);
+          });
+        }
       } catch (error) {
         console.error('페이지 렌더링 실패:', error);
         setError('페이지를 렌더링할 수 없습니다.');
       }
     };
 
-    renderPage();
+    renderPages();
 
     return () => {
-      if (rafId) cancelAnimationFrame(rafId);
+      if (leftRafId) cancelAnimationFrame(leftRafId);
+      if (rightRafId) cancelAnimationFrame(rightRafId);
     };
-  }, [currentPageProxy, zoom, setError]);
+  }, [leftPageProxy, rightPageProxy, zoom, setError]);
 
   // 페이지 변경 시 주석 로드
   useEffect(() => {
@@ -118,8 +169,19 @@ export function EbookViewer() {
     );
   }
 
+  // 썸네일 패널 열림 상태에 따른 중앙 정렬을 위한 여백 계산 (96px = w-24)
+  const panelWidth = isThumbnailPanelOpen ? 96 : 0;
+
   return (
-    <div className="relative flex items-center justify-center h-full bg-gray-100 overflow-auto">
+    <div
+      className="absolute inset-0 flex items-center justify-center bg-white overflow-auto transition-all duration-300"
+      style={{
+        height: 'calc(100vh - 70px)',
+        left: `${panelWidth}px`,
+        width: `calc(100% - ${panelWidth}px)`,
+        padding: '4px 12px',
+      }}
+    >
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10">
           <div className="text-center">
@@ -130,24 +192,95 @@ export function EbookViewer() {
       )}
 
       <div
-        className="relative transition-transform duration-200"
+        className={`relative ${
+          displayMode === 'double' ? 'flex gap-4' : ''
+        } ${
+          pageTransition === 'next' ? 'animate-page-turn-left' : ''
+        } ${
+          pageTransition === 'prev' ? 'animate-page-turn-right' : ''
+        }`}
         style={{
           transform: `rotate(${rotation}deg)`,
+          maxWidth: '100%',
+          maxHeight: '100%',
         }}
+        onDoubleClick={handleDoubleClick}
       >
-        {/* PDF Canvas */}
-        <canvas
-          ref={canvasRef}
-          className="shadow-2xl"
-          style={{
-            maxWidth: '100%',
-            height: 'auto',
-          }}
-        />
+        {/* 왼쪽/단일 페이지 */}
+        <div className="relative flex items-center justify-center">
+          <canvas
+            ref={leftCanvasRef}
+            className="shadow-2xl cursor-pointer"
+            style={{
+              maxHeight: '100%',
+              maxWidth: '100%',
+              height: 'auto',
+              width: 'auto',
+              objectFit: 'contain',
+            }}
+          />
+          <DrawingCanvas pdfCanvasRef={leftCanvasRef} />
+        </div>
 
-        {/* Drawing Canvas Overlay */}
-        <DrawingCanvas pdfCanvasRef={canvasRef} />
+        {/* 오른쪽 페이지 (양면 모드) */}
+        {displayMode === 'double' && rightPageProxy && (
+          <div className="relative flex items-center justify-center">
+            <canvas
+              ref={rightCanvasRef}
+              className="shadow-2xl cursor-pointer"
+              style={{
+                maxHeight: '100%',
+                maxWidth: '100%',
+                height: 'auto',
+                width: 'auto',
+                objectFit: 'contain',
+              }}
+            />
+            <DrawingCanvas pdfCanvasRef={rightCanvasRef} />
+          </div>
+        )}
       </div>
+
+      {/* 이전 페이지 버튼 - 교재 왼쪽 바깥 */}
+      {currentPage > 1 && (
+        <button
+          onClick={previousPage}
+          className="btn-prev fixed top-1/2 -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-white/90 hover:bg-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
+          style={{
+            left: `${panelWidth + 16}px`,
+          }}
+          draggable="false"
+          aria-label="이전 페이지"
+        >
+          <svg
+            className="w-6 h-6 text-gray-700 group-hover:text-primary-600 transition-colors"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+      )}
+
+      {/* 다음 페이지 버튼 - 교재 오른쪽 바깥 */}
+      {currentPage < totalPages && (
+        <button
+          onClick={nextPage}
+          className="btn-next fixed right-4 top-1/2 -translate-y-1/2 z-30 w-12 h-12 rounded-full bg-white/90 hover:bg-white shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
+          draggable="false"
+          aria-label="다음 페이지"
+        >
+          <svg
+            className="w-6 h-6 text-gray-700 group-hover:text-primary-600 transition-colors"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }

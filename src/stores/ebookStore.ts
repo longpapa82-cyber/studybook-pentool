@@ -42,7 +42,7 @@ interface EbookState {
 }
 
 const MIN_ZOOM = 0.5;
-const MAX_ZOOM = 2.0;
+const MAX_ZOOM = 3.0;
 const ZOOM_STEP = 0.25;
 
 export const useEbookStore = create<EbookState>((set, get) => ({
@@ -57,7 +57,7 @@ export const useEbookStore = create<EbookState>((set, get) => ({
   rotation: 0,
   isLoading: false,
   error: null,
-  isThumbnailPanelOpen: false,
+  isThumbnailPanelOpen: true, // 기본값을 true로 변경
 
   // Actions
   setPdfDocument: (pdf, id, name) => {
@@ -108,16 +108,24 @@ export const useEbookStore = create<EbookState>((set, get) => ({
   },
 
   nextPage: () => {
-    const { currentPage, totalPages } = get();
-    if (currentPage < totalPages) {
-      set({ currentPage: currentPage + 1 });
+    const { currentPage, totalPages, displayMode } = get();
+    const step = displayMode === 'double' ? 2 : 1;
+    if (currentPage + step <= totalPages) {
+      set({ currentPage: currentPage + step });
+    } else if (currentPage < totalPages) {
+      // 마지막 페이지로 이동
+      set({ currentPage: totalPages });
     }
   },
 
   previousPage: () => {
-    const { currentPage } = get();
-    if (currentPage > 1) {
-      set({ currentPage: currentPage - 1 });
+    const { currentPage, displayMode } = get();
+    const step = displayMode === 'double' ? 2 : 1;
+    if (currentPage - step >= 1) {
+      set({ currentPage: currentPage - step });
+    } else if (currentPage > 1) {
+      // 첫 페이지로 이동
+      set({ currentPage: 1 });
     }
   },
 

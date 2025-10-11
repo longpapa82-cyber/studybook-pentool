@@ -36,7 +36,7 @@ export function ZoomControls() {
       {/* 확대 버튼 */}
       <button
         onClick={zoomIn}
-        disabled={zoom >= 2.0}
+        disabled={zoom >= 3.0}
         className="icon-btn disabled:opacity-30 disabled:cursor-not-allowed"
         title="확대 (Ctrl + +)"
       >

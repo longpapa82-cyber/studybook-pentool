@@ -2,12 +2,13 @@
 
 import * as pdfjsLib from 'pdfjs-dist';
 
-// PDF.js Worker 설정 - Vercel 배포 환경에서도 작동하도록 CDN 사용
-const WORKER_SRC = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.mjs`;
-
-// Worker 초기화
+// PDF.js Worker 설정
 if (typeof window !== 'undefined') {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = WORKER_SRC;
+  // 개발 환경에서는 node_modules에서 직접 로드
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url
+  ).toString();
 }
 
 // CORS 설정을 위한 기본 옵션
@@ -45,19 +46,29 @@ export async function renderPageToCanvas(
   canvas: HTMLCanvasElement,
   scale: number = 1
 ): Promise<void> {
-  const viewport = page.getViewport({ scale });
+  // 고해상도 디스플레이 지원 (Retina 등)
+  const pixelRatio = window.devicePixelRatio || 1;
+  const outputScale = pixelRatio * scale;
+
+  const viewport = page.getViewport({ scale: outputScale });
   const context = canvas.getContext('2d');
 
   if (!context) {
     throw new Error('Canvas context를 가져올 수 없습니다.');
   }
 
+  // Canvas 실제 크기 설정 (고해상도)
   canvas.width = viewport.width;
   canvas.height = viewport.height;
+
+  // CSS 표시 크기 설정 (논리적 크기)
+  canvas.style.width = `${viewport.width / pixelRatio}px`;
+  canvas.style.height = `${viewport.height / pixelRatio}px`;
 
   const renderContext = {
     canvasContext: context,
     viewport: viewport,
+    canvas: canvas,
   };
 
   await page.render(renderContext).promise;
@@ -116,7 +127,7 @@ function parsePdfDate(dateString: string): Date | undefined {
 }
 
 /**
- * 썸네일 생성
+ * 썸네일 생성 (고해상도)
  */
 export async function generateThumbnail(
   page: pdfjsLib.PDFPageProxy,
@@ -124,11 +135,18 @@ export async function generateThumbnail(
 ): Promise<string> {
   const viewport = page.getViewport({ scale: 1 });
   const scale = maxWidth / viewport.width;
-  const scaledViewport = page.getViewport({ scale });
+
+  // 고해상도를 위해 devicePixelRatio 적용
+  const pixelRatio = window.devicePixelRatio || 2;
+  const scaledViewport = page.getViewport({ scale: scale * pixelRatio });
 
   const canvas = document.createElement('canvas');
   canvas.width = scaledViewport.width;
   canvas.height = scaledViewport.height;
+
+  // CSS 크기는 논리적 크기로 설정
+  canvas.style.width = `${scaledViewport.width / pixelRatio}px`;
+  canvas.style.height = `${scaledViewport.height / pixelRatio}px`;
 
   const context = canvas.getContext('2d');
   if (!context) {
@@ -138,7 +156,9 @@ export async function generateThumbnail(
   await page.render({
     canvasContext: context,
     viewport: scaledViewport,
+    canvas: canvas,
   }).promise;
 
-  return canvas.toDataURL('image/jpeg', 0.7);
+  // JPEG 품질을 0.9로 향상
+  return canvas.toDataURL('image/jpeg', 0.9);
 }

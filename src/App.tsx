@@ -6,19 +6,12 @@ import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { storageService } from '@/services/storageService';
 import { loadPdfFromArrayBuffer, extractPdfMetadata } from '@/utils/pdfUtils';
 import { useEbookStore } from '@/stores/ebookStore';
+import { usePentoolStore } from '@/stores/pentoolStore';
 
 // Lazy load viewer components for code splitting
 const EbookViewer = lazy(() => import('@/components/ebook/EbookViewer').then(m => ({ default: m.EbookViewer })));
-const PageNavigator = lazy(() => import('@/components/ebook/PageNavigator').then(m => ({ default: m.PageNavigator })));
-const ZoomControls = lazy(() => import('@/components/ebook/ZoomControls').then(m => ({ default: m.ZoomControls })));
 const ThumbnailPanel = lazy(() => import('@/components/ebook/ThumbnailPanel').then(m => ({ default: m.ThumbnailPanel })));
-const DisplayModeToggle = lazy(() => import('@/components/ebook/DisplayModeToggle').then(m => ({ default: m.DisplayModeToggle })));
-const LassoTool = lazy(() => import('@/components/common/LassoTool').then(m => ({ default: m.LassoTool })));
-const ToolPalette = lazy(() => import('@/components/pentool/ToolPalette').then(m => ({ default: m.ToolPalette })));
-const ColorPicker = lazy(() => import('@/components/pentool/ColorPicker').then(m => ({ default: m.ColorPicker })));
-const StrokeSelector = lazy(() => import('@/components/pentool/StrokeSelector').then(m => ({ default: m.StrokeSelector })));
-const UndoRedoControls = lazy(() => import('@/components/pentool/UndoRedoControls').then(m => ({ default: m.UndoRedoControls })));
-const ShapeTools = lazy(() => import('@/components/pentool/ShapeTools').then(m => ({ default: m.ShapeTools })));
+const BottomTabBar = lazy(() => import('@/components/ebook/BottomTabBar').then(m => ({ default: m.BottomTabBar })));
 
 // Loading fallback component
 const LoadingSpinner = () => (
@@ -33,7 +26,7 @@ function App() {
   const [currentView, setCurrentView] = useState<View>('home');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  const { setPdfDocument, pdfName, reset, setLoading } = useEbookStore();
+  const { setPdfDocument, reset, setLoading } = useEbookStore();
 
   // 키보드 단축키 활성화
   useKeyboardShortcuts();
@@ -108,7 +101,7 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-secondary-50">
+    <div className={`min-h-screen ${currentView === 'viewer' ? 'bg-white' : 'bg-gradient-to-br from-primary-50 via-white to-secondary-50'}`}>
       {/* 뷰어 모드가 아닐 때만 헤더 표시 */}
       {currentView !== 'viewer' ? (
         <header className="toolbar sticky top-0 z-10 bg-white/80 backdrop-blur-sm">
@@ -154,56 +147,7 @@ function App() {
             </nav>
           </div>
         </header>
-      ) : (
-        /* 뷰어 모드 전용 헤더 */
-        <header className="toolbar sticky top-0 z-10 bg-white border-b border-gray-200">
-          <div className="container mx-auto px-4 flex items-center justify-between">
-            {/* 왼쪽: 닫기 버튼 & 제목 */}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleCloseViewer}
-                className="icon-btn"
-                title="목록으로 돌아가기"
-              >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
-              </button>
-              <h2 className="font-semibold text-gray-800 truncate max-w-md">
-                {pdfName || 'E-Book'}
-              </h2>
-            </div>
-
-            {/* 중앙: 페이지 네비게이션 */}
-            <div className="flex-1 flex justify-center">
-              <Suspense fallback={<LoadingSpinner />}>
-                <PageNavigator />
-              </Suspense>
-            </div>
-
-            {/* 오른쪽: 도구 */}
-            <div className="flex items-center gap-2 overflow-x-auto">
-              <Suspense fallback={<LoadingSpinner />}>
-                <ToolPalette />
-                <div className="h-6 w-px bg-gray-300" />
-                <ShapeTools />
-                <div className="h-6 w-px bg-gray-300" />
-                <ColorPicker />
-                <div className="h-6 w-px bg-gray-300" />
-                <StrokeSelector />
-                <div className="h-6 w-px bg-gray-300" />
-                <UndoRedoControls />
-                <div className="h-6 w-px bg-gray-300" />
-                <DisplayModeToggle />
-                <div className="h-6 w-px bg-gray-300" />
-                <LassoTool onCapture={(img) => console.log('캡처:', img)} />
-                <div className="h-6 w-px bg-gray-300" />
-                <ZoomControls />
-              </Suspense>
-            </div>
-          </div>
-        </header>
-      )}
+      ) : null}
 
       {/* 뷰어 모드가 아닐 때만 main 태그 사용 */}
       {currentView !== 'viewer' ? (
@@ -331,8 +275,8 @@ function App() {
           )}
         </main>
       ) : (
-        /* Viewer - 전체 화면 사용 */
-        <div className="h-[calc(100vh-64px)]">
+        /* Viewer - 하단 탭바 높이를 제외한 전체 화면 사용 */
+        <div className="relative bg-white" style={{ height: 'calc(100vh - 70px)' }}>
           <Suspense
             fallback={
               <div className="flex items-center justify-center h-full">
@@ -345,6 +289,7 @@ function App() {
           >
             <EbookViewer />
             <ThumbnailPanel />
+            <BottomTabBar onClose={handleCloseViewer} />
           </Suspense>
         </div>
       )}

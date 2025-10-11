@@ -2,6 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  /* 애니메이션 */
+  .animate-fade-in {
+    animation: fadeIn 0.2s ease-in-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translate(-50%, 20px);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+  }
+}
+
 @layer base {
   :root {
     font-family: 'Inter var', system-ui, -apple-system, sans-serif;
@@ -94,5 +125,89 @@
     to {
       opacity: 1;
     }
+  }
+
+  /* 페이지 넘김 애니메이션 - 3D 종이 말림 효과 */
+  .animate-page-turn-left {
+    animation: pageTurnLeft 0.6s ease-in-out;
+    transform-origin: left center;
+    transform-style: preserve-3d;
+  }
+
+  .animate-page-turn-right {
+    animation: pageTurnRight 0.6s ease-in-out;
+    transform-origin: right center;
+    transform-style: preserve-3d;
+  }
+
+  @keyframes pageTurnLeft {
+    0% {
+      transform: perspective(1200px) rotateY(0deg);
+      opacity: 1;
+    }
+    30% {
+      transform: perspective(1200px) rotateY(-15deg) scaleX(0.95);
+      opacity: 0.8;
+    }
+    50% {
+      transform: perspective(1200px) rotateY(-90deg) scaleX(0.8);
+      opacity: 0.5;
+    }
+    51% {
+      transform: perspective(1200px) rotateY(90deg) scaleX(0.8);
+      opacity: 0.5;
+    }
+    70% {
+      transform: perspective(1200px) rotateY(15deg) scaleX(0.95);
+      opacity: 0.8;
+    }
+    100% {
+      transform: perspective(1200px) rotateY(0deg);
+      opacity: 1;
+    }
+  }
+
+  @keyframes pageTurnRight {
+    0% {
+      transform: perspective(1200px) rotateY(0deg);
+      opacity: 1;
+    }
+    30% {
+      transform: perspective(1200px) rotateY(15deg) scaleX(0.95);
+      opacity: 0.8;
+    }
+    50% {
+      transform: perspective(1200px) rotateY(90deg) scaleX(0.8);
+      opacity: 0.5;
+    }
+    51% {
+      transform: perspective(1200px) rotateY(-90deg) scaleX(0.8);
+      opacity: 0.5;
+    }
+    70% {
+      transform: perspective(1200px) rotateY(-15deg) scaleX(0.95);
+      opacity: 0.8;
+    }
+    100% {
+      transform: perspective(1200px) rotateY(0deg);
+      opacity: 1;
+    }
+  }
+
+  /* 페이지 네비게이션 버튼 */
+  .btn-prev,
+  .btn-next {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .btn-prev:hover,
+  .btn-next:hover {
+    transform: translateY(-50%) scale(1.1);
+  }
+
+  .btn-prev:active,
+  .btn-next:active {
+    transform: translateY(-50%) scale(0.95);
   }
 }
