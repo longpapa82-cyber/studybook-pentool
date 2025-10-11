@@ -4,6 +4,8 @@ import { usePentoolStore } from '@/stores/pentoolStore';
 import { useEbookStore } from '@/stores/ebookStore';
 import { requestAnimationFrameThrottle } from '@/utils/performanceUtils';
 import { ContextMenu } from './ContextMenu';
+import { calculateViewport, expandViewport, getVisibleAnnotations } from '@/utils/viewportUtils';
+import { getPerformanceMonitor } from '@/utils/performanceMonitor';
 
 interface DrawingCanvasProps {
   pdfCanvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -39,6 +41,34 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
   const { currentPage, zoom } = useEbookStore();
 
   const pageAnnotations = annotations.get(currentPage) || [];
+  const performanceMonitor = getPerformanceMonitor();
+
+  // Phase 2: Viewport-based rendering for performance
+  const visibleAnnotations = useMemo(() => {
+    const startTime = performance.now();
+
+    if (canvasSize.width === 0 || canvasSize.height === 0) {
+      return pageAnnotations;
+    }
+
+    // Calculate current viewport with expansion for smooth scrolling
+    const viewport = calculateViewport(canvasSize.width, canvasSize.height, zoom);
+    const expandedViewport = expandViewport(viewport, 1.2); // 20% expansion
+
+    // Filter to visible annotations only
+    const visible = getVisibleAnnotations(pageAnnotations, expandedViewport);
+
+    // Record performance metrics
+    const renderTime = performance.now() - startTime;
+    performanceMonitor.record({
+      renderTime,
+      annotationCount: pageAnnotations.length,
+      visibleAnnotationCount: visible.length,
+      memoryUsage: performanceMonitor.getMemoryUsage(),
+    });
+
+    return visible;
+  }, [pageAnnotations, canvasSize, zoom, performanceMonitor]);
 
   // PDF 캔버스 크기와 동기화
   useEffect(() => {
@@ -201,8 +231,8 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
         onMouseLeave={handleMouseUp}
       >
         <Layer>
-          {/* 저장된 주석 렌더링 */}
-          {pageAnnotations.map((annotation) => {
+          {/* 저장된 주석 렌더링 - Phase 2: Only visible annotations */}
+          {visibleAnnotations.map((annotation) => {
             if (annotation.type === 'drawing') {
               const line = annotation.data;
               const isSelected = selectedAnnotationId === annotation.id;
