@@ -5,6 +5,8 @@ import { usePentoolStore } from '@/stores/pentoolStore';
 import { renderPageToCanvas } from '@/utils/pdfUtils';
 import { storageService } from '@/services/storageService';
 import { DrawingCanvas } from '@/components/pentool/DrawingCanvas';
+import { StorageControls } from '@/components/pentool/StorageControls';
+import { useAutoSave } from '@/hooks/useAutoSave';
 
 export function EbookViewer() {
   const leftCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -32,7 +34,33 @@ export function EbookViewer() {
     resetZoom,
   } = useEbookStore();
 
-  const { loadAnnotations, annotations } = usePentoolStore();
+  const { loadAnnotations, annotations, setCurrentPdfFileName, loadFromStorage } = usePentoolStore();
+
+  // Phase 4-1: Auto-save annotations every 30 seconds
+  const [autoSaveMessage, setAutoSaveMessage] = useState<string | null>(null);
+  useAutoSave({
+    enabled: true,
+    interval: 30000, // 30 seconds
+    onSave: () => {
+      setAutoSaveMessage('자동 저장됨');
+      setTimeout(() => setAutoSaveMessage(null), 2000);
+    },
+    onError: (error) => {
+      console.error('[AutoSave Error]:', error);
+    },
+  });
+
+  // Phase 4-1: Set PDF file name and load annotations on mount
+  useEffect(() => {
+    if (pdfId) {
+      setCurrentPdfFileName(pdfId);
+      // Try to load existing annotations
+      const loaded = loadFromStorage(pdfId);
+      if (loaded) {
+        console.log('[Phase 4-1] Loaded existing annotations for:', pdfId);
+      }
+    }
+  }, [pdfId, setCurrentPdfFileName, loadFromStorage]);
 
   // 더블 클릭 핸들러 - 확대/축소 토글
   const handleDoubleClick = () => {
@@ -280,6 +308,18 @@ export function EbookViewer() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
         </button>
+      )}
+
+      {/* Phase 4-1: Storage Controls */}
+      <div className="fixed bottom-24 right-4 z-40">
+        <StorageControls />
+      </div>
+
+      {/* Phase 4-1: Auto-save indicator */}
+      {autoSaveMessage && (
+        <div className="fixed bottom-36 right-4 z-40 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg text-sm animate-slide-up">
+          {autoSaveMessage}
+        </div>
       )}
     </div>
   );

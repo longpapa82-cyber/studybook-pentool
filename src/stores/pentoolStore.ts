@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { PenTool, DrawingLine, Annotation, TextData } from '@/types/pentool.types';
 import { simplifyPoints } from '@/utils/geometryUtils';
+import { saveToLocalStorage, loadFromLocalStorage } from '@/utils/storageUtils';
 
 interface PentoolState {
   // 현재 활성화된 도구
@@ -65,6 +66,14 @@ interface PentoolState {
 
   loadAnnotations: (pageNumber: number, annotations: Annotation[]) => void;
   reset: () => void;
+
+  // Phase 4-1: Export/Import and persistence
+  exportAnnotations: (pdfFileName?: string) => void;
+  importAnnotations: (annotationsMap: Map<number, Annotation[]>) => void;
+  saveToStorage: (pdfFileName?: string) => boolean;
+  loadFromStorage: (pdfFileName?: string) => boolean;
+  currentPdfFileName: string;
+  setCurrentPdfFileName: (fileName: string) => void;
 }
 
 export const usePentoolStore = create<PentoolState>((set, get) => ({
@@ -79,6 +88,7 @@ export const usePentoolStore = create<PentoolState>((set, get) => ({
   clipboardAnnotation: null,
   history: [],
   historyIndex: -1,
+  currentPdfFileName: 'document',
 
   setActiveTool: (tool) => set({ activeTool: tool }),
 
@@ -458,5 +468,52 @@ export const usePentoolStore = create<PentoolState>((set, get) => ({
       history: [],
       historyIndex: -1,
     });
+  },
+
+  // Phase 4-1: Export/Import methods
+  exportAnnotations: (pdfFileName) => {
+    const { annotations, currentPdfFileName } = get();
+    const fileName = pdfFileName || currentPdfFileName;
+
+    // Use storage utils to download JSON
+    const { downloadAnnotationsJSON } = require('@/utils/storageUtils');
+    downloadAnnotationsJSON(annotations, fileName);
+  },
+
+  importAnnotations: (annotationsMap) => {
+    set({
+      annotations: annotationsMap,
+      selectedAnnotationId: null,
+      selectedAnnotations: new Set(),
+      history: [Array.from(annotationsMap.values()).flat()],
+      historyIndex: 0,
+    });
+  },
+
+  saveToStorage: (pdfFileName) => {
+    const { annotations, currentPdfFileName } = get();
+    const fileName = pdfFileName || currentPdfFileName;
+    return saveToLocalStorage(annotations, fileName);
+  },
+
+  loadFromStorage: (pdfFileName) => {
+    const { currentPdfFileName } = get();
+    const fileName = pdfFileName || currentPdfFileName;
+    const annotationsMap = loadFromLocalStorage(fileName);
+
+    if (annotationsMap) {
+      set({
+        annotations: annotationsMap,
+        history: [Array.from(annotationsMap.values()).flat()],
+        historyIndex: 0,
+      });
+      return true;
+    }
+
+    return false;
+  },
+
+  setCurrentPdfFileName: (fileName) => {
+    set({ currentPdfFileName: fileName });
   },
 }));
