@@ -36,7 +36,13 @@ export interface TextData {
   position: Point;
   color: string;
   fontSize: number;
-  fontFamily?: string;
+  fontFamily: string;
+  fontStyle: 'normal' | 'italic';
+  fontWeight: 'normal' | 'bold';
+  align: 'left' | 'center' | 'right';
+  width?: number;
+  backgroundColor?: string;
+  padding?: number;
 }
 
 export interface Annotation {

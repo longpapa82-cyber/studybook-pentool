@@ -1,11 +1,13 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import { Stage, Layer, Line } from 'react-konva';
+import { Stage, Layer, Line, Text as KonvaText } from 'react-konva';
 import { usePentoolStore } from '@/stores/pentoolStore';
 import { useEbookStore } from '@/stores/ebookStore';
 import { requestAnimationFrameThrottle } from '@/utils/performanceUtils';
 import { ContextMenu } from './ContextMenu';
+import { TextEditor } from './TextEditor';
 import { calculateViewport, expandViewport, getVisibleAnnotations } from '@/utils/viewportUtils';
 import { getPerformanceMonitor } from '@/utils/performanceMonitor';
+import type { TextData } from '@/types/pentool.types';
 
 interface DrawingCanvasProps {
   pdfCanvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -21,6 +23,8 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
     y: number;
     annotationId: string;
   } | null>(null);
+  const [textEditorPosition, setTextEditorPosition] = useState<{ x: number; y: number } | null>(null);
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
 
   const {
     activeTool,
@@ -36,6 +40,8 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
     selectAnnotation,
     moveAnnotation,
     clearSelection,
+    addTextAnnotation,
+    updateTextAnnotation,
   } = usePentoolStore();
 
   const { currentPage, zoom } = useEbookStore();
@@ -98,6 +104,14 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
     // 빈 공간 클릭 시 선택 해제
     if (clickedOnEmpty && activeTool === 'none') {
       clearSelection();
+      return;
+    }
+
+    // Phase 3-1: Text tool handling
+    if (activeTool === 'text') {
+      const pos = e.target.getStage().getPointerPosition();
+      setTextEditorPosition({ x: pos.x, y: pos.y });
+      setEditingTextId(null);
       return;
     }
 
@@ -166,6 +180,51 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
     }
 
     setDragStart(null);
+  };
+
+  // Phase 3-1: Text editor handlers
+  const handleTextEditorComplete = (
+    text: string,
+    fontSize: number,
+    fontFamily: string,
+    fontStyle: 'normal' | 'italic',
+    fontWeight: 'normal' | 'bold',
+    align: 'left' | 'center' | 'right'
+  ) => {
+    if (!textEditorPosition) return;
+
+    const textData: TextData = {
+      text,
+      position: textEditorPosition,
+      color: penColor,
+      fontSize,
+      fontFamily,
+      fontStyle,
+      fontWeight,
+      align,
+    };
+
+    if (editingTextId) {
+      // Update existing text
+      updateTextAnnotation(currentPage, editingTextId, textData);
+    } else {
+      // Create new text annotation
+      addTextAnnotation(currentPage, textData);
+    }
+
+    setTextEditorPosition(null);
+    setEditingTextId(null);
+  };
+
+  const handleTextEditorCancel = () => {
+    setTextEditorPosition(null);
+    setEditingTextId(null);
+  };
+
+  // Double click on text to edit
+  const handleTextDoubleClick = (annotationId: string, textData: TextData) => {
+    setTextEditorPosition(textData.position);
+    setEditingTextId(annotationId);
   };
 
   // 도구별 스타일 설정 (Memoized for performance)
@@ -261,6 +320,33 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
                   listening={activeTool === 'none'}
                 />
               );
+            } else if (annotation.type === 'text') {
+              // Phase 3-1: Text annotation rendering
+              const textData = annotation.data as TextData;
+              const isSelected = selectedAnnotationId === annotation.id;
+
+              return (
+                <KonvaText
+                  key={annotation.id}
+                  x={textData.position.x}
+                  y={textData.position.y}
+                  text={textData.text}
+                  fontSize={textData.fontSize}
+                  fontFamily={textData.fontFamily}
+                  fontStyle={textData.fontStyle}
+                  fill={isSelected ? '#3B82F6' : textData.color}
+                  align={textData.align}
+                  width={textData.width}
+                  padding={textData.padding || 0}
+                  draggable={activeTool === 'none'}
+                  onClick={() => handleAnnotationClick(annotation.id)}
+                  onDblClick={() => handleTextDoubleClick(annotation.id, textData)}
+                  onContextMenu={(e) => handleAnnotationContextMenu(annotation.id, e)}
+                  onDragStart={(e) => handleAnnotationDragStart(annotation.id, e)}
+                  onDragEnd={(e) => handleAnnotationDragEnd(annotation.id, e)}
+                  listening={activeTool === 'none'}
+                />
+              );
             }
             return null;
           })}
@@ -285,6 +371,26 @@ export function DrawingCanvas({ pdfCanvasRef }: DrawingCanvasProps) {
           y={contextMenu.y}
           annotationId={contextMenu.annotationId}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Phase 3-1: Text Editor */}
+      {textEditorPosition && (
+        <TextEditor
+          position={textEditorPosition}
+          initialText={
+            editingTextId
+              ? (pageAnnotations.find((a) => a.id === editingTextId)?.data as TextData)?.text
+              : ''
+          }
+          initialFontSize={
+            editingTextId
+              ? (pageAnnotations.find((a) => a.id === editingTextId)?.data as TextData)?.fontSize
+              : 16
+          }
+          initialColor={penColor}
+          onComplete={handleTextEditorComplete}
+          onCancel={handleTextEditorCancel}
         />
       )}
     </div>

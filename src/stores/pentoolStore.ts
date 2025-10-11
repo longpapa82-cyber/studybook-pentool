@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { PenTool, DrawingLine, Annotation } from '@/types/pentool.types';
+import type { PenTool, DrawingLine, Annotation, TextData } from '@/types/pentool.types';
 import { simplifyPoints } from '@/utils/geometryUtils';
 
 interface PentoolState {
@@ -34,6 +34,10 @@ interface PentoolState {
   startDrawing: (point: { x: number; y: number }) => void;
   continueDrawing: (point: { x: number; y: number }) => void;
   finishDrawing: (pageNumber: number) => void;
+
+  // Text annotation
+  addTextAnnotation: (pageNumber: number, textData: TextData) => void;
+  updateTextAnnotation: (pageNumber: number, annotationId: string, textData: Partial<TextData>) => void;
 
   addAnnotation: (pageNumber: number, annotation: Annotation) => void;
   removeAnnotation: (pageNumber: number, annotationId: string) => void;
@@ -143,6 +147,57 @@ export const usePentoolStore = create<PentoolState>((set, get) => ({
       history: newHistory,
       historyIndex: newHistory.length - 1,
     });
+  },
+
+  // Phase 3-1: Text annotation methods
+  addTextAnnotation: (pageNumber, textData) => {
+    const { annotations } = get();
+
+    const newAnnotation: Annotation = {
+      id: `text_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      type: 'text',
+      data: textData,
+      pageNumber,
+      createdAt: new Date().toISOString(),
+    };
+
+    const pageAnnotations = annotations.get(pageNumber) || [];
+    const newAnnotations = new Map(annotations);
+    newAnnotations.set(pageNumber, [...pageAnnotations, newAnnotation]);
+
+    // History 업데이트
+    const { history, historyIndex } = get();
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(Array.from(newAnnotations.values()).flat());
+
+    set({
+      annotations: newAnnotations,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+    });
+  },
+
+  updateTextAnnotation: (pageNumber, annotationId, textData) => {
+    const { annotations } = get();
+    const pageAnnotations = annotations.get(pageNumber) || [];
+
+    const updatedAnnotations = pageAnnotations.map((annotation) => {
+      if (annotation.id === annotationId && annotation.type === 'text') {
+        return {
+          ...annotation,
+          data: {
+            ...annotation.data,
+            ...textData,
+          },
+        };
+      }
+      return annotation;
+    });
+
+    const newAnnotations = new Map(annotations);
+    newAnnotations.set(pageNumber, updatedAnnotations);
+
+    set({ annotations: newAnnotations });
   },
 
   addAnnotation: (pageNumber, annotation) => {
