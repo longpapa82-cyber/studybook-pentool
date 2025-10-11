@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import { usePentoolStore } from '@/stores/pentoolStore';
 import { useEbookStore } from '@/stores/ebookStore';
+import { showNotification } from '@/utils/notificationUtils';
 import type { PenTool } from '@/types/pentool.types';
 
 // 키보드 단축키 매핑
@@ -20,9 +21,13 @@ export function useKeyboardShortcuts() {
     undo,
     redo,
     selectedAnnotationId,
+    selectedAnnotations,
     removeAnnotation,
-    copyAnnotation,
-    pasteAnnotation,
+    deleteMultipleAnnotations,
+    copySelectedAnnotations,
+    cutSelectedAnnotations,
+    pasteAnnotations,
+    duplicateSelectedAnnotations,
     clearSelection,
     setActiveTool,
   } = usePentoolStore();
@@ -88,24 +93,48 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Ctrl/Cmd + C: Copy
-      if (hasModifier && key === 'c' && selectedAnnotationId) {
+      // Phase 3-4: Enhanced clipboard shortcuts
+      // Ctrl/Cmd + C: Copy selected annotations
+      if (hasModifier && key === 'c' && selectedAnnotations.size > 0) {
         e.preventDefault();
-        copyAnnotation(selectedAnnotationId, currentPage);
+        copySelectedAnnotations(currentPage);
+        showNotification(`${selectedAnnotations.size}개 주석 복사됨`);
         return;
       }
 
-      // Ctrl/Cmd + V: Paste
+      // Ctrl/Cmd + X: Cut selected annotations
+      if (hasModifier && key === 'x' && selectedAnnotations.size > 0) {
+        e.preventDefault();
+        const count = selectedAnnotations.size;
+        cutSelectedAnnotations(currentPage);
+        showNotification(`${count}개 주석 잘라내기`);
+        return;
+      }
+
+      // Ctrl/Cmd + V: Paste annotations
       if (hasModifier && key === 'v') {
         e.preventDefault();
-        pasteAnnotation(currentPage);
+        pasteAnnotations(currentPage);
+        showNotification('주석 붙여넣기');
         return;
       }
 
-      // Delete/Backspace: 선택된 주석 삭제
-      if ((key === 'delete' || key === 'backspace') && selectedAnnotationId) {
+      // Ctrl/Cmd + D: Duplicate selected annotations
+      if (hasModifier && key === 'd' && selectedAnnotations.size > 0) {
         e.preventDefault();
-        removeAnnotation(currentPage, selectedAnnotationId);
+        duplicateSelectedAnnotations(currentPage);
+        showNotification(`${selectedAnnotations.size}개 주석 복제됨`);
+        return;
+      }
+
+      // Delete/Backspace: Delete selected annotations
+      if ((key === 'delete' || key === 'backspace') && selectedAnnotations.size > 0) {
+        e.preventDefault();
+        if (selectedAnnotations.size === 1 && selectedAnnotationId) {
+          removeAnnotation(currentPage, selectedAnnotationId);
+        } else {
+          deleteMultipleAnnotations(currentPage, Array.from(selectedAnnotations));
+        }
         clearSelection();
         return;
       }
@@ -158,9 +187,13 @@ export function useKeyboardShortcuts() {
     undo,
     redo,
     selectedAnnotationId,
+    selectedAnnotations,
     removeAnnotation,
-    copyAnnotation,
-    pasteAnnotation,
+    deleteMultipleAnnotations,
+    copySelectedAnnotations,
+    cutSelectedAnnotations,
+    pasteAnnotations,
+    duplicateSelectedAnnotations,
     clearSelection,
     currentPage,
     setActiveTool,

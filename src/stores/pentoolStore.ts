@@ -25,7 +25,10 @@ interface PentoolState {
   // 선택 상태
   selectedAnnotationId: string | null;
   selectedAnnotations: Set<string>; // 다중 선택
-  clipboardAnnotation: Annotation | null;
+
+  // Phase 3-4: Enhanced clipboard
+  clipboardAnnotations: Annotation[]; // 다중 복사 지원
+  clipboardSourcePage: number | null; // 복사된 페이지 번호
 
   // Undo/Redo 스택
   history: Annotation[][];
@@ -67,9 +70,11 @@ interface PentoolState {
   moveMultipleAnnotations: (pageNumber: number, annotationIds: string[], deltaX: number, deltaY: number) => void;  // Phase 3-2
   deleteMultipleAnnotations: (pageNumber: number, annotationIds: string[]) => void;  // Phase 3-2
 
-  // 복사/붙여넣기
-  copyAnnotation: (annotationId: string, pageNumber: number) => void;
-  pasteAnnotation: (pageNumber: number) => void;
+  // Phase 3-4: Enhanced clipboard operations
+  copySelectedAnnotations: (pageNumber: number) => void;
+  cutSelectedAnnotations: (pageNumber: number) => void;
+  pasteAnnotations: (pageNumber: number) => void;
+  duplicateSelectedAnnotations: (pageNumber: number) => void;
 
   undo: () => void;
   redo: () => void;
@@ -97,7 +102,8 @@ export const usePentoolStore = create<PentoolState>((set, get) => ({
   annotations: new Map(),
   selectedAnnotationId: null,
   selectedAnnotations: new Set(),
-  clipboardAnnotation: null,
+  clipboardAnnotations: [],
+  clipboardSourcePage: null,
   history: [],
   historyIndex: -1,
   currentPdfFileName: 'document',
@@ -475,38 +481,107 @@ export const usePentoolStore = create<PentoolState>((set, get) => ({
     clearSelection();
   },
 
-  // 복사/붙여넣기
-  copyAnnotation: (annotationId, pageNumber) => {
-    const { annotations } = get();
-    const pageAnnotations = annotations.get(pageNumber) || [];
-    const annotation = pageAnnotations.find((a) => a.id === annotationId);
+  // Phase 3-4: Enhanced clipboard operations
+  copySelectedAnnotations: (pageNumber) => {
+    const { annotations, selectedAnnotations } = get();
 
-    if (annotation) {
-      set({ clipboardAnnotation: annotation });
-    }
+    if (selectedAnnotations.size === 0) return;
+
+    const pageAnnotations = annotations.get(pageNumber) || [];
+    const toCopy = pageAnnotations.filter((a) => selectedAnnotations.has(a.id));
+
+    set({
+      clipboardAnnotations: toCopy,
+      clipboardSourcePage: pageNumber,
+    });
   },
 
-  pasteAnnotation: (pageNumber) => {
-    const { clipboardAnnotation, addAnnotation } = get();
+  cutSelectedAnnotations: (pageNumber) => {
+    const { copySelectedAnnotations, deleteMultipleAnnotations, selectedAnnotations } = get();
 
-    if (!clipboardAnnotation) return;
+    if (selectedAnnotations.size === 0) return;
 
-    const newAnnotation: Annotation = {
-      ...clipboardAnnotation,
-      id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      pageNumber,
-      createdAt: new Date().toISOString(),
-    };
+    // Copy first
+    copySelectedAnnotations(pageNumber);
 
-    // 약간 오프셋 추가 (10px)
-    if (newAnnotation.type === 'drawing') {
-      const offsetPoints = newAnnotation.data.points.map((point, index) =>
-        index % 2 === 0 ? point + 10 : point + 10
-      );
-      newAnnotation.data = { ...newAnnotation.data, points: offsetPoints };
-    }
+    // Then delete
+    const idsToDelete = Array.from(selectedAnnotations);
+    deleteMultipleAnnotations(pageNumber, idsToDelete);
+  },
 
-    addAnnotation(pageNumber, newAnnotation);
+  pasteAnnotations: (pageNumber) => {
+    const { clipboardAnnotations, annotations } = get();
+
+    if (clipboardAnnotations.length === 0) return;
+
+    const pageAnnotations = annotations.get(pageNumber) || [];
+    const newAnnotations = new Map(annotations);
+
+    // Create new annotations with offsets
+    const pastedAnnotations = clipboardAnnotations.map((clipboardAnnotation) => {
+      const newAnnotation: Annotation = {
+        ...clipboardAnnotation,
+        id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        pageNumber,
+        createdAt: new Date().toISOString(),
+      };
+
+      // Apply offset based on annotation type
+      if (newAnnotation.type === 'drawing') {
+        const offsetPoints = (newAnnotation.data as any).points.map((point: number, index: number) =>
+          index % 2 === 0 ? point + 10 : point + 10
+        );
+        newAnnotation.data = { ...newAnnotation.data, points: offsetPoints };
+      } else if (newAnnotation.type === 'text') {
+        const textData = newAnnotation.data as TextData;
+        newAnnotation.data = {
+          ...textData,
+          position: {
+            x: textData.position.x + 10,
+            y: textData.position.y + 10,
+          },
+        };
+      } else if (newAnnotation.type === 'shape') {
+        const shapeData = newAnnotation.data as ShapeData;
+        newAnnotation.data = {
+          ...shapeData,
+          startPoint: {
+            x: shapeData.startPoint.x + 10,
+            y: shapeData.startPoint.y + 10,
+          },
+          endPoint: {
+            x: shapeData.endPoint.x + 10,
+            y: shapeData.endPoint.y + 10,
+          },
+        };
+      }
+
+      return newAnnotation;
+    });
+
+    newAnnotations.set(pageNumber, [...pageAnnotations, ...pastedAnnotations]);
+
+    // Update history
+    const { history, historyIndex } = get();
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(Array.from(newAnnotations.values()).flat());
+
+    // Select the pasted annotations
+    const pastedIds = pastedAnnotations.map((a) => a.id);
+
+    set({
+      annotations: newAnnotations,
+      history: newHistory,
+      historyIndex: newHistory.length - 1,
+      selectedAnnotations: new Set(pastedIds),
+      selectedAnnotationId: pastedIds.length === 1 ? pastedIds[0] : null,
+    });
+  },
+
+  duplicateSelectedAnnotations: (pageNumber) => {
+    const { copySelectedAnnotations, pasteAnnotations } = get();
+    copySelectedAnnotations(pageNumber);
+    pasteAnnotations(pageNumber);
   },
 
   undo: () => {
